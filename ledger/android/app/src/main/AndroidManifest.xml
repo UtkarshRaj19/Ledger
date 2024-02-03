@@ -3,7 +3,8 @@
     <application
         android:label="Ledger"
         android:name="${applicationName}"
-        android:icon="@mipmap/ledger_logo">
+        android:icon="@mipmap/ledger_logo"
+        android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

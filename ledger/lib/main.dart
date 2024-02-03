@@ -7,7 +7,9 @@ import 'home_screen.dart';
 
 
 void main() {
-  runApp(const MyApp());
+  runApp(
+    const MyApp()
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -85,7 +87,12 @@ class LoginPageState extends State<LoginPage> {
               backgroundColor: Colors.green,
               textColor: Colors.white,
             );
-            _navigateToHomeScreen(1);
+            int adminId = responseData['AdminId'];
+            String adminName = responseData['AdminName'];
+            List<Map<String, dynamic>> activeDebtors = (responseData['ActiveDebtors'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+            int activeDebtorsCount = responseData['ActiveDebtorsCount'];
+            String totalDisbursedAmount = responseData['TotalDisbursedAmount'];
+            _navigateToHomeScreen(adminId,adminName,activeDebtors,activeDebtorsCount,totalDisbursedAmount);
           }
           else{
             Fluttertoast.showToast(
@@ -120,9 +127,10 @@ class LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _navigateToHomeScreen(int adminId) {
+  void _navigateToHomeScreen(int adminId , String adminName , List<Map<String, dynamic>> activeDebtors , int activeDebtorsCount , String totalDisbursedAmount) {
+    // print("adminId:$adminId  adminName:$adminName  activeDebtors:$activeDebtors  activeDebtorsCount:$activeDebtorsCount");
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => ProfilePage1(adminId: adminId)),
+      MaterialPageRoute(builder: (context) => ProfilePage1(adminId: adminId , adminName:adminName , activeDebtors:activeDebtors , activeDebtorsCount:activeDebtorsCount , totalDisbursedAmount:totalDisbursedAmount)),
     );
   }
 

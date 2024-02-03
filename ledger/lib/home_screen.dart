@@ -1,11 +1,23 @@
 import 'package:flutter/material.dart';
 import 'main.dart';
+import 'add_debtor.dart';
 
 
 // ignore: must_be_immutable
 class ProfilePage1 extends StatelessWidget {
   int adminId;
-  ProfilePage1({super.key, required this.adminId});
+  String adminName;
+  String totalDisbursedAmount;
+  int activeDebtorsCount;
+  List<Map<String, dynamic>> activeDebtors;
+  // ProfilePage1({super.key, required this.adminId , required this.adminName , required this.activeDebtors , required this.activeDebtorsCount});
+  ProfilePage1({super.key, 
+    required this.adminId,
+    required this.adminName,
+    required this.activeDebtors,
+    required this.activeDebtorsCount,
+    required this.totalDisbursedAmount,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -20,19 +32,21 @@ class ProfilePage1 extends StatelessWidget {
               child: Column(
                 children: [
                   Text(
-                    "Utkarsh Raj",
+                    adminName,
                     style: Theme.of(context)
                         .textTheme
                         .titleLarge
                         ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  const Center(
-                    child: _AmountBox(amount: 100),
+                  Center(
+                    child: _AmountBox(amount: totalDisbursedAmount),
                   ),
                   const SizedBox(height: 8),
                   Expanded(
-                    child: _ScrollableList(),
+                    child: _ScrollableList(activeDebtors: activeDebtors,
+                                          activeDebtorsCount: activeDebtorsCount,
+                                          adminId:adminId),
                   ),
                 ],
               ),
@@ -41,6 +55,8 @@ class ProfilePage1 extends StatelessWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: UniqueKey(),
+        key: GlobalKey(debugLabel: 'LogoutFloatingButton'),
         onPressed: () {
           _showLogoutConfirmation(context);
         },
@@ -167,80 +183,106 @@ Positioned(
 }
 
 
-class _ScrollableList extends StatelessWidget {
+
+// ignore: must_be_immutable
+class _ScrollableList extends StatefulWidget {
+  final List<Map<String, dynamic>> activeDebtors;
+  int activeDebtorsCount;
+  final int adminId;
+
+  _ScrollableList({
+    required this.activeDebtors,
+    required this.activeDebtorsCount,
+    required this.adminId,
+  });
+
+  @override
+  _ScrollableListState createState() => _ScrollableListState();
+}
+
+class _ScrollableListState extends State<_ScrollableList> {
+  void refreshList(List<Map<String, dynamic>> updatedActiveDebtors, int updatedActiveDebtorsCount) {
+    setState(() {
+      widget.activeDebtors.clear();
+      widget.activeDebtors.addAll(updatedActiveDebtors);
+      widget.activeDebtorsCount = updatedActiveDebtorsCount;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    const int itemCount = 20;
-    final List<Widget> listItems = List.generate(itemCount, (index) {
-      int serialNumber = index + 1;
-      String name = "Name $serialNumber";
-      String mobile = "Mobile $serialNumber";
-
-      return Card(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Colors.blueAccent, Color.fromARGB(255, 11, 131, 119)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(8.0),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Icon(Icons.account_circle),
-                Text('Name: $name'),
-                Text('Mobile: $mobile'),
-              ],
-            ),
-          ),
-        ),
-      );
-    });
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 2.0),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2.0),
           child: Row(
             children: [
-              Icon(
-                Icons.bookmark,
-                color: Colors.blue, // Set the desired color
+              const Icon(
+                Icons.account_circle, // Change to the appropriate user icon
+                color: Colors.blue,
                 size: 24,
               ),
-              SizedBox(width: 8),
-              Text(
+              const SizedBox(width: 8),
+              const Text(
                 'Active Debtors',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),
               ),
-              Spacer(), // Added Spacer widget
-              FloatingActionButton(
-                onPressed: _handleFabPress,
-              backgroundColor: Colors.blue,
-              mini: true,
-              child: Icon(Icons.add),
-            ),
+              const Spacer(),
+              Builder(
+                builder: (context) => FloatingActionButton(
+                  heroTag: UniqueKey(),
+                  onPressed: () => _handleFabPress(context),
+                  backgroundColor: Colors.blue,
+                  mini: true,
+                  child: const Icon(Icons.add),
+                ),
+              ),
             ],
           ),
         ),
         Expanded(
-          child: itemCount > 0
+          child: widget.activeDebtorsCount  > 0
               ? ListView.builder(
                   padding: EdgeInsets.zero,
-                  itemCount: itemCount,
-                  itemBuilder: (context, index) => listItems[index],
+                  itemCount: widget.activeDebtorsCount,
+                  itemBuilder: (context, index) {
+                    Map<String, dynamic> debtor = widget.activeDebtors[index];
+                    String name = toTitleCase(debtor['Name']);
+                    String mobile = debtor['Mobile'];
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Colors.blueAccent, Color.fromARGB(255, 11, 131, 119)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.account_circle),
+                              const SizedBox(width: 15),
+                              Text(name),
+                              const Spacer(),
+                              Text(mobile),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 )
               : const Center(
                   child: Text('No active Debtors'),
@@ -249,19 +291,35 @@ class _ScrollableList extends StatelessWidget {
       ],
     );
   }
+  void _handleFabPress(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AddDebtorPopup(adminId: widget.adminId, onDebtorAdded: refreshList);
+      },
+    );
+  }
 }
 
-void _handleFabPress() {
+
+// void _handleFabPress() {
+// }
+
+String toTitleCase(String text) {
+  return text.split(' ').map((word) {
+    if (word.isNotEmpty) {
+      return word[0].toUpperCase() + word.substring(1);
+    } else {
+      return '';
+    }
+  }).join(' ');
 }
 
-
-
-
-
+// ignore: must_be_immutable
 class _AmountBox extends StatelessWidget {
-  final int amount;
+  String amount;
 
-  const _AmountBox({required this.amount});
+  _AmountBox({required this.amount});
 
   @override
   Widget build(BuildContext context) {
@@ -279,7 +337,7 @@ class _AmountBox extends StatelessWidget {
             style: TextStyle(fontSize: 20),
           ),
           Text(
-            '$amount',
+            amount,
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
         ],
