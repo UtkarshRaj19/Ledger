@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'main.dart';
 import 'add_debtor.dart';
-
+import 'debtor_profile.dart';
+import 'package:fluttertoast/fluttertoast.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 // ignore: must_be_immutable
 class ProfilePage1 extends StatelessWidget {
@@ -40,7 +43,7 @@ class ProfilePage1 extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Center(
-                    child: _AmountBox(amount: totalDisbursedAmount),
+                    child: AmountBox(amount: totalDisbursedAmount),
                   ),
                   const SizedBox(height: 8),
                   Expanded(
@@ -211,6 +214,7 @@ class _ScrollableListState extends State<_ScrollableList> {
 
   @override
   Widget build(BuildContext context) {
+    BuildContext storedContext = context;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -219,7 +223,7 @@ class _ScrollableListState extends State<_ScrollableList> {
           child: Row(
             children: [
               const Icon(
-                Icons.account_circle, // Change to the appropriate user icon
+                Icons.bookmark,
                 color: Colors.blue,
                 size: 24,
               ),
@@ -251,10 +255,78 @@ class _ScrollableListState extends State<_ScrollableList> {
                   itemCount: widget.activeDebtorsCount,
                   itemBuilder: (context, index) {
                     Map<String, dynamic> debtor = widget.activeDebtors[index];
+                    int debtorId = debtor['ID'];
                     String name = toTitleCase(debtor['Name']);
                     String mobile = debtor['Mobile'];
-
-                    return Card(
+                    
+                    return GestureDetector(
+                      onTap: () async {
+                        const String apiUrl = 'https://wpoc2ga7ki.execute-api.ap-southeast-1.amazonaws.com/dev/v1/DebtorDetailyById';
+                        try {
+                          final response = await http.post(
+                            Uri.parse(apiUrl),
+                            body: {
+                              'DebtorID': debtorId.toString(),
+                            },
+                          );
+                          if (response.statusCode == 200) {
+                            Map<String, dynamic> responseData = json.decode(response.body);
+                            if (responseData['status'] == true){
+                              // Fluttertoast.showToast(
+                              // msg: "Debtor $debtorId Clicked !!!",
+                              // toastLength: Toast.LENGTH_SHORT,
+                              // gravity: ToastGravity.BOTTOM,
+                              // timeInSecForIosWeb: 2,
+                              // backgroundColor: Colors.red,
+                              // textColor: Colors.white,
+                              // );
+                              int loanAmount = responseData['LoanAmount'];
+                              int paidAmount = responseData['PaidAmount'];
+                              int balanceAmount = responseData['BalanceAmount'];
+                              List<Map<String, dynamic>> transactions = (responseData['Transactions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                              // ignore: use_build_context_synchronously
+                              Navigator.push(
+                                storedContext,
+                                MaterialPageRoute(builder: (context) => Dashboard(
+                                debtorId: debtorId,debtorName: name,debtorNumber: mobile,
+                                loanAmount: loanAmount, paidAmount: paidAmount,balanceAmount: balanceAmount,
+                                transactions: transactions , adminId:widget.adminId
+                              )
+                              ),
+                              );
+                            }
+                            else{
+                              Fluttertoast.showToast(
+                                msg: "Error Getting Debtor Details",
+                                toastLength: Toast.LENGTH_LONG,
+                                gravity: ToastGravity.BOTTOM,
+                                timeInSecForIosWeb: 2,
+                                backgroundColor: Colors.red,
+                                textColor: Colors.white,
+                              );
+                            }
+                            } else {
+                            Fluttertoast.showToast(
+                                msg: "Some Error Occoured",
+                                toastLength: Toast.LENGTH_LONG,
+                                gravity: ToastGravity.BOTTOM,
+                                timeInSecForIosWeb: 2,
+                                backgroundColor: Colors.red,
+                                textColor: Colors.white,
+                              );
+                          }
+                        } catch (e) {
+                          Fluttertoast.showToast(
+                                msg: "Server Error",
+                                toastLength: Toast.LENGTH_LONG,
+                                gravity: ToastGravity.BOTTOM,
+                                timeInSecForIosWeb: 2,
+                                backgroundColor: Colors.red,
+                                textColor: Colors.white,
+                              );
+                        }
+                      },
+                      child: Card(
                       margin: const EdgeInsets.symmetric(vertical: 6),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8.0),
@@ -280,6 +352,7 @@ class _ScrollableListState extends State<_ScrollableList> {
                             ],
                           ),
                         ),
+                      ),
                       ),
                     );
                   },
@@ -316,10 +389,22 @@ String toTitleCase(String text) {
 }
 
 // ignore: must_be_immutable
-class _AmountBox extends StatelessWidget {
+class AmountBox extends StatefulWidget {
   String amount;
 
-  _AmountBox({required this.amount});
+  AmountBox({super.key, required this.amount});
+
+  @override
+  // ignore: library_private_types_in_public_api
+  _AmountBoxState createState() => _AmountBoxState();
+}
+
+class _AmountBoxState extends State<AmountBox> {
+  void updateAmount(String newAmount) {
+    setState(() {
+      widget.amount = newAmount;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -337,7 +422,7 @@ class _AmountBox extends StatelessWidget {
             style: TextStyle(fontSize: 20),
           ),
           Text(
-            amount,
+            widget.amount,
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
         ],
