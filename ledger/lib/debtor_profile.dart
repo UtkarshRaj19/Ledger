@@ -1,11 +1,13 @@
+// ignore_for_file: library_private_types_in_public_api
+
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:provider/provider.dart';
+import 'app_state_notifier.dart';
 
-_AmountWidgetState? globalAmountWidgetState;
-_ScrollableListWidgetState? globalScrollWidgetState;
 
 // ignore: must_be_immutable
 class Dashboard extends StatefulWidget {
@@ -20,26 +22,28 @@ class Dashboard extends StatefulWidget {
   Dashboard({super.key , required this.debtorId , required this.debtorName , required this.debtorNumber , required this.loanAmount , required this.paidAmount , required this.balanceAmount , required this.transactions, required this.adminId});
 
   @override
-  // ignore: library_private_types_in_public_api
   _DashboardState createState() => _DashboardState();
 }
 
 class _DashboardState extends State<Dashboard> {
+  late AppState appState;
+
   void _showAddTransactionPopup() {
+    final appState = context.read<AppState>();
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AddTransactionDialog(
           onAddTransaction: (amount, type, remark) {
-            // print('adminId: ${widget.adminId}, DebtorId: ${widget.debtorId}, Amount: $amount, Type: $type, Remark: $remark');
-            _processTransaction(widget.adminId,widget.debtorId,amount, type, remark);
+            final disbursementData = DisbursementData();
+            _processTransaction(context,widget.adminId,widget.debtorId,amount, type, remark,disbursementData,appState);
           },
         );
       },
     );
   }
 
-  void _processTransaction(int adminId,int debtorId,String amount, String type, String remark) async {
+  void _processTransaction(BuildContext context, int adminId, int debtorId, String amount, String type, String remark, DisbursementData disbursementData,AppState appState) async {
     const String apiUrl = 'https://wpoc2ga7ki.execute-api.ap-southeast-1.amazonaws.com/dev/v1/AddDebtorTransaction';
     try {
         final response = await http.post(
@@ -57,7 +61,7 @@ class _DashboardState extends State<Dashboard> {
           if (responseData['status'] == true){
             Fluttertoast.showToast(
               msg: "Transaction Inserted Successfully",
-              toastLength: Toast.LENGTH_LONG,
+              toastLength: Toast.LENGTH_SHORT,
               gravity: ToastGravity.BOTTOM,
               timeInSecForIosWeb: 2,
               backgroundColor: Colors.green,
@@ -66,10 +70,12 @@ class _DashboardState extends State<Dashboard> {
             int loanAmount = responseData['LoanAmount'];
             int paidAmount = responseData['PaidAmount'];
             // int balanceAmount = responseData['BalanceAmount'];
-            // String totalDisbursedAmount = responseData['TotalDisbursedAmount'];
+            String totalDisbursedAmount = responseData['TotalDisbursedAmount'];
             List<Map<String, dynamic>> updatedTransactions = (responseData['Transactions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-            AmountWidget.getGlobalInstance()?.updateAmounts(loanAmount, paidAmount);
-            ScrollableListWidget.getGlobalInstance()?.updateValues(updatedTransactions, updatedTransactions.length);
+
+            disbursementData.updateTransactions(appState,updatedTransactions.length,updatedTransactions);
+            disbursementData.updateDisbursedAmount(appState,totalDisbursedAmount);
+            disbursementData.updateAmountBox(appState,loanAmount,paidAmount);
           }
           else{
             Fluttertoast.showToast(
@@ -147,18 +153,11 @@ class _DashboardState extends State<Dashboard> {
                       style: const TextStyle(fontSize: 16, color: Colors.grey),
                     ),
                     const SizedBox(height: 16),
-                    CircularBalanceDisplay(amountTaken: widget.loanAmount, amountPaid: widget.paidAmount),
+                    const CircularBalanceDisplay(),
                   ],
                 ),
                 const Spacer(),
-                AmountWidget(
-                initialAmountTaken: widget.loanAmount,
-                initialAmountPaid: widget.paidAmount,
-                onWidgetCreated: () {
-                  // The widget has been created, now you can access its state
-                  AmountWidget.getGlobalInstance()?.updateAmounts(widget.loanAmount, widget.paidAmount);
-                },
-              ),
+                const AmountWidget(),
               ],
             ),
           ),
@@ -186,13 +185,7 @@ class _DashboardState extends State<Dashboard> {
                 ],
               ),
             ),
-            // ScrollableListWidget(itemList:widget.transactions,transactionCount:widget.transactions.length),
-            ScrollableListWidget(initialItemList:widget.transactions,initialTransactionCount:widget.transactions.length,
-                onScrollWidgetCreated: () {
-                  // The widget has been created, now you can access its state
-                  ScrollableListWidget.getGlobalInstance()?.updateValues(widget.transactions, widget.transactions.length);
-                },
-              ),
+            const ScrollableListWidget(),
           ],
         ),
       );
@@ -205,7 +198,6 @@ class AddTransactionDialog extends StatefulWidget {
   const AddTransactionDialog({super.key, required this.onAddTransaction});
 
   @override
-  // ignore: library_private_types_in_public_api
   _AddTransactionDialogState createState() => _AddTransactionDialogState();
 }
 
@@ -221,6 +213,13 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         remarkController.text.isNotEmpty &&
         transactionType != null &&
         isMounted;
+  }
+
+  @override
+  void dispose() {
+    amountController.dispose();
+    remarkController.dispose();
+    super.dispose();
   }
 
   @override
@@ -328,43 +327,113 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
 
 // ignore: must_be_immutable
 class ScrollableListWidget extends StatefulWidget {
-  List<Map<String, dynamic>> initialItemList;
-  int initialTransactionCount;
-  Function? onScrollWidgetCreated;
-
-  ScrollableListWidget({super.key, required this.initialItemList, required this.initialTransactionCount , required this.onScrollWidgetCreated});
+  const ScrollableListWidget({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
   _ScrollableListWidgetState createState() => _ScrollableListWidgetState();
-  // ignore: library_private_types_in_public_api
-  static _ScrollableListWidgetState? getGlobalInstance() {
-    return globalScrollWidgetState;
-  }
 }
 
 class _ScrollableListWidgetState extends State<ScrollableListWidget> {
-  late List<Map<String, dynamic>> itemList;
-  late int transactionCount;
 
   @override
-  void initState() {
-    super.initState();
-    itemList = widget.initialItemList;
-    transactionCount = widget.initialTransactionCount;
-    globalScrollWidgetState = this;
-    widget.onScrollWidgetCreated?.call();
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    return Expanded(
+      child: appState.transactionCount == 0
+          ? const Center(
+              child: Text(
+                "No Transactions",
+                style: TextStyle(fontSize: 18, color: Colors.white),
+              ),
+            )
+          : ListView.builder(
+              itemCount: appState.transactionCount,
+              itemBuilder: (BuildContext context, int index) {
+                bool isCredit = appState.itemList[index]['TransactionType'] == 'Credit';
+                String transactionType = isCredit ? "Credit" : "Debit";
+                String dateTime = appState.itemList[index]['CreatedAt'];
+                int amount = isCredit
+                    ? appState.itemList[index]['Amount']
+                    : -appState.itemList[index]['Amount'];
+                  return Dismissible(
+                    key: Key(appState.itemList[index]['ID'].toString()),
+                    direction: DismissDirection.startToEnd,
+                    background: Container(
+                      color: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      alignment: Alignment.centerLeft,
+                      child: const Icon(
+                        Icons.delete,
+                        color: Colors.white,
+                      ),
+                    ),
+                    confirmDismiss: (direction) async {
+                      return await showDialog(
+                        context: context,
+                        builder: (BuildContext context) {
+                          return AlertDialog(
+                            title: const Text("Confirm Delete"),
+                            content: const Text("Are you sure you want to delete this transaction?"),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(true),
+                                child: const Text("Yes"),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(false),
+                                child: const Text("No"),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                    onDismissed: (direction) {
+                      if (direction == DismissDirection.startToEnd) {
+                        print("dismissed successfully");
+                      }
+                    },
+                  child:GestureDetector(
+                  onTap: () {
+                    _showTransactionDetails(index , appState.itemList);
+                  },
+                  child: Card(
+                    elevation: 4.0,
+                    margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 10.0),
+                    color: isCredit ? Colors.green : Colors.redAccent,
+                    child: ListTile(
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  transactionType,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                Text(
+                                  dateTime,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            "${amount > 0 ? '+' : ''}$amount",
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  ),
+                );
+              },
+            ),
+    );
   }
-
-  void updateValues(List<Map<String, dynamic>> newItemList, int newTransactionCount) {
-    print("*********************************updateValues*****************************************");
-    setState(() {
-      itemList = newItemList;
-      transactionCount = newTransactionCount;
-    });
-  }
-
-  void _showTransactionDetails(int index) {
+  void _showTransactionDetails(int index , List<Map<String, dynamic>> itemList) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -444,87 +513,16 @@ class _ScrollableListWidgetState extends State<ScrollableListWidget> {
       },
     );
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: transactionCount == 0
-          ? const Center(
-              child: Text(
-                "No Transactions",
-                style: TextStyle(fontSize: 18, color: Colors.white),
-              ),
-            )
-          : ListView.builder(
-              itemCount: transactionCount,
-              itemBuilder: (BuildContext context, int index) {
-                bool isCredit = itemList[index]['TransactionType'] == 'Credit';
-                String transactionType = isCredit ? "Credit" : "Debit";
-                String dateTime = itemList[index]['CreatedAt'];
-                int amount = isCredit
-                    ? itemList[index]['Amount']
-                    : -itemList[index]['Amount'];
-                return GestureDetector(
-                  onTap: () {
-                    _showTransactionDetails(index);
-                  },
-                  child: Card(
-                    elevation: 4.0,
-                    margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 10.0),
-                    color: isCredit ? Colors.green : Colors.redAccent,
-                    child: ListTile(
-                      title: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  transactionType,
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                                Text(
-                                  dateTime,
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            "${amount > 0 ? '+' : ''}$amount",
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
-  }
 }
 
 
 class AmountWidget extends StatefulWidget {
-  final int initialAmountTaken;
-  final int initialAmountPaid;
-  final Function? onWidgetCreated;
 
-  const AmountWidget({super.key, 
-    required this.initialAmountTaken,
-    required this.initialAmountPaid,
-    this.onWidgetCreated,
-  });
+  const AmountWidget({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
+  
   _AmountWidgetState createState() => _AmountWidgetState();
-
-  // ignore: library_private_types_in_public_api
-  static _AmountWidgetState? getGlobalInstance() {
-    return globalAmountWidgetState;
-  }
 }
 
 class _AmountWidgetState extends State<AmountWidget> {
@@ -532,30 +530,11 @@ class _AmountWidgetState extends State<AmountWidget> {
   late int amountPaid;
 
   @override
-  void initState() {
-    super.initState();
-    amountTaken = widget.initialAmountTaken;
-    amountPaid = widget.initialAmountPaid;
-    // Set the global instance when the state is created
-    globalAmountWidgetState = this;
-
-    // Notify the global instance that it's ready
-    widget.onWidgetCreated?.call();
-  }
-
-  void updateAmounts(int newAmountTaken, int newAmountPaid) {
-    setState(() {
-      amountTaken = newAmountTaken;
-      amountPaid = newAmountPaid;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    int balance = amountTaken - amountPaid;
+    final appState = context.watch<AppState>();
+    int balance = appState.amountTaken - appState.amountPaid;
     String balanceText = balance >= 0 ? "Balance" : "Advanced";
-    int balanceAmount = amountTaken - amountPaid >=0 ? amountTaken - amountPaid :  amountPaid - amountTaken;
-    // widget.onWidgetCreated?.call();
+    int balanceAmount = appState.amountTaken - appState.amountPaid >=0 ? appState.amountTaken - appState.amountPaid :  appState.amountPaid - appState.amountTaken;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -572,7 +551,7 @@ class _AmountWidgetState extends State<AmountWidget> {
               margin: const EdgeInsets.only(right: 6),
             ),
             Text(
-              "$amountTaken",
+              "${appState.amountTaken}",
               style: const TextStyle(fontSize: 16),
             ),
           ],
@@ -591,7 +570,7 @@ class _AmountWidgetState extends State<AmountWidget> {
               margin: const EdgeInsets.only(right: 6),
             ),
             Text(
-              "$amountPaid",
+              "${appState.amountPaid}",
               style: const TextStyle(fontSize: 16),
             ),
           ],
@@ -620,21 +599,22 @@ class _AmountWidgetState extends State<AmountWidget> {
   }
 }
 
-class CircularBalanceDisplay extends StatelessWidget {
-  final int amountTaken;
-  final int amountPaid;
-
+class CircularBalanceDisplay extends StatefulWidget {
   const CircularBalanceDisplay({
     super.key,
-    required this.amountTaken,
-    required this.amountPaid,
   });
 
   @override
-  Widget build(BuildContext context) {
-    double percentagePaid = amountPaid / amountTaken;
-    // print("percentagePaid: $percentagePaid amountPaid: $amountPaid amountTaken: $amountTaken");
+  _CircularBalanceDisplayState createState() => _CircularBalanceDisplayState();
+}
 
+class _CircularBalanceDisplayState extends State<CircularBalanceDisplay> {
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    double percentagePaid = appState.amountPaid / appState.amountTaken;
+    percentagePaid = percentagePaid.clamp(0.0, 1.0);
     return Center(
       child: SizedBox(
         height: 100,
@@ -648,7 +628,7 @@ class CircularBalanceDisplay extends StatelessWidget {
 }
 
 class CircularBalancePainter extends CustomPainter {
-  double percentagePaid;
+  final double percentagePaid;
 
   CircularBalancePainter(this.percentagePaid);
 
@@ -666,9 +646,6 @@ class CircularBalancePainter extends CustomPainter {
       ..color = Colors.lightGreen
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth;
-
-    // Limit the percentagePaid to the valid range (0-100%)
-    percentagePaid = percentagePaid.clamp(0.0, 1.0);
 
     canvas.drawCircle(Offset(size.width / 2, size.height / 2), radius - strokeWidth / 2, outlinePaint);
 
@@ -688,16 +665,19 @@ class CircularBalancePainter extends CustomPainter {
   }
 }
 
-class AmountProvider extends ChangeNotifier {
-  int _amountTaken = 0;
-  int _amountPaid = 0;
+class DisbursementData {
+  String mainDisbursedAmount = "";
 
-  int get amountTaken => _amountTaken;
-  int get amountPaid => _amountPaid;
+  void updateDisbursedAmount(AppState appState,String newAmount) {
+    appState.setTotalDisbursedAmount(newAmount);
+    mainDisbursedAmount = newAmount;
+  }
 
-  void updateAmounts(int newAmountTaken, int newAmountPaid) {
-    _amountTaken = newAmountTaken;
-    _amountPaid = newAmountPaid;
-    notifyListeners();
+  void updateTransactions(AppState appState,int transactionsCount,List<Map<String, dynamic>> transactions) {
+    appState.setTransactions(transactionsCount,transactions);
+  }
+
+  void updateAmountBox(AppState appState,int newamountTaken,int newAmountPaid) {
+    appState.setAmountBox(newamountTaken,newAmountPaid);
   }
 }

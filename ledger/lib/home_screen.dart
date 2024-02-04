@@ -1,10 +1,14 @@
+// ignore_for_file: library_private_types_in_public_api
+
 import 'package:flutter/material.dart';
 import 'main.dart';
 import 'add_debtor.dart';
+import 'app_state_notifier.dart';
 import 'debtor_profile.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:provider/provider.dart';
 
 // ignore: must_be_immutable
 class ProfilePage1 extends StatelessWidget {
@@ -42,8 +46,8 @@ class ProfilePage1 extends StatelessWidget {
                         ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  Center(
-                    child: AmountBox(amount: totalDisbursedAmount),
+                  const Center(
+                    child: AmountBox(),
                   ),
                   const SizedBox(height: 8),
                   Expanded(
@@ -204,6 +208,7 @@ class _ScrollableList extends StatefulWidget {
 }
 
 class _ScrollableListState extends State<_ScrollableList> {
+  bool isNavigationInProgress = false;
   void refreshList(List<Map<String, dynamic>> updatedActiveDebtors, int updatedActiveDebtorsCount) {
     setState(() {
       widget.activeDebtors.clear();
@@ -214,6 +219,8 @@ class _ScrollableListState extends State<_ScrollableList> {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.read<AppState>();
+    final debtorData = DebtorData();
     BuildContext storedContext = context;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,6 +268,8 @@ class _ScrollableListState extends State<_ScrollableList> {
                     
                     return GestureDetector(
                       onTap: () async {
+                        if (!isNavigationInProgress) {
+                        isNavigationInProgress = true;
                         const String apiUrl = 'https://wpoc2ga7ki.execute-api.ap-southeast-1.amazonaws.com/dev/v1/DebtorDetailyById';
                         try {
                           final response = await http.post(
@@ -284,6 +293,8 @@ class _ScrollableListState extends State<_ScrollableList> {
                               int paidAmount = responseData['PaidAmount'];
                               int balanceAmount = responseData['BalanceAmount'];
                               List<Map<String, dynamic>> transactions = (responseData['Transactions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                              debtorData.updateTransactions(appState, transactions.length, transactions);
+                              debtorData.updateAmountBox(appState, loanAmount, paidAmount);
                               // ignore: use_build_context_synchronously
                               Navigator.push(
                                 storedContext,
@@ -294,6 +305,7 @@ class _ScrollableListState extends State<_ScrollableList> {
                               )
                               ),
                               );
+                              isNavigationInProgress = false;
                             }
                             else{
                               Fluttertoast.showToast(
@@ -324,6 +336,7 @@ class _ScrollableListState extends State<_ScrollableList> {
                                 backgroundColor: Colors.red,
                                 textColor: Colors.white,
                               );
+                        }
                         }
                       },
                       child: Card(
@@ -390,24 +403,18 @@ String toTitleCase(String text) {
 
 // ignore: must_be_immutable
 class AmountBox extends StatefulWidget {
-  String amount;
 
-  AmountBox({super.key, required this.amount});
+  const AmountBox({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
   _AmountBoxState createState() => _AmountBoxState();
 }
 
 class _AmountBoxState extends State<AmountBox> {
-  void updateAmount(String newAmount) {
-    setState(() {
-      widget.amount = newAmount;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
     return Container(
       padding: const EdgeInsets.all(8.0),
       decoration: BoxDecoration(
@@ -418,15 +425,25 @@ class _AmountBoxState extends State<AmountBox> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text(
-            '₹',
+            '₹ ',
             style: TextStyle(fontSize: 20),
           ),
           Text(
-            widget.amount,
+            appState.totalDisbursedAmount,
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
         ],
       ),
     );
+  }
+}
+
+class DebtorData {
+  void updateTransactions(AppState appState,int transactionsCount,List<Map<String, dynamic>> transactions) {
+    appState.setTransactions(transactionsCount,transactions);
+  }
+
+  void updateAmountBox(AppState appState,int newamountTaken,int newAmountPaid) {
+    appState.setAmountBox(newamountTaken,newAmountPaid);
   }
 }

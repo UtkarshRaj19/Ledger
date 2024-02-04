@@ -4,11 +4,16 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:fluttertoast/fluttertoast.dart';
 import 'home_screen.dart';
+import 'package:provider/provider.dart';
+import 'app_state_notifier.dart';
 
 
 void main() {
   runApp(
-    const MyApp()
+    ChangeNotifierProvider(
+      create: (context) => AppState(),
+      child: const MyApp(),
+    ),
   );
 }
 
@@ -129,6 +134,8 @@ class LoginPageState extends State<LoginPage> {
 
   void _navigateToHomeScreen(int adminId , String adminName , List<Map<String, dynamic>> activeDebtors , int activeDebtorsCount , String totalDisbursedAmount) {
     // print("adminId:$adminId  adminName:$adminName  activeDebtors:$activeDebtors  activeDebtorsCount:$activeDebtorsCount");
+    final appState = context.read<AppState>();
+    appState.setTotalDisbursedAmount(totalDisbursedAmount);
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (context) => ProfilePage1(adminId: adminId , adminName:adminName , activeDebtors:activeDebtors , activeDebtorsCount:activeDebtorsCount , totalDisbursedAmount:totalDisbursedAmount)),
     );
