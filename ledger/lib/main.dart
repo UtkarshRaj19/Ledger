@@ -121,7 +121,7 @@ class LoginPageState extends State<LoginPage> {
         }
       } catch (e) {
         Fluttertoast.showToast(
-              msg: "Server Error",
+              msg: "$e",
               toastLength: Toast.LENGTH_LONG,
               gravity: ToastGravity.BOTTOM,
               timeInSecForIosWeb: 2,
@@ -136,9 +136,21 @@ class LoginPageState extends State<LoginPage> {
     // print("adminId:$adminId  adminName:$adminName  activeDebtors:$activeDebtors  activeDebtorsCount:$activeDebtorsCount");
     final appState = context.read<AppState>();
     appState.setTotalDisbursedAmount(totalDisbursedAmount);
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => ProfilePage1(adminId: adminId , adminName:adminName , activeDebtors:activeDebtors , activeDebtorsCount:activeDebtorsCount , totalDisbursedAmount:totalDisbursedAmount)),
-    );
+    // Navigator.of(context).pushReplacement(
+    //   MaterialPageRoute(builder: (context) => ProfilePage1(adminId: adminId , adminName:adminName , activeDebtors:activeDebtors , activeDebtorsCount:activeDebtorsCount , totalDisbursedAmount:totalDisbursedAmount)),
+    // );
+    Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(
+      builder: (context) => ProfilePage1(
+        adminId: adminId,
+        adminName: adminName,
+        activeDebtors: activeDebtors,
+        activeDebtorsCount: activeDebtorsCount,
+        totalDisbursedAmount: totalDisbursedAmount,
+      ),
+    ),
+    (route) => false, // This line clears the navigation stack
+  );
   }
 
   @override

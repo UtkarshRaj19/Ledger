@@ -78,7 +78,6 @@ class _AddDebtorPopupState extends State<AddDebtorPopup> {
                   onPressed: () async {
                     if (_formKey.currentState!.validate()) {
                       _formKey.currentState!.save();
-                      print('Name: $name, Mobile: $mobile, Address: $address');
                       const String apiUrl = 'https://wpoc2ga7ki.execute-api.ap-southeast-1.amazonaws.com/dev/v1/AddDebtor';
                       try {
                         final response = await http.post(

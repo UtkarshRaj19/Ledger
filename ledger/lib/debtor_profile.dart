@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
+// import 'package:ledger/home_screen.dart';
 import 'dart:convert';
 import 'package:provider/provider.dart';
 import 'app_state_notifier.dart';
@@ -185,7 +186,7 @@ class _DashboardState extends State<Dashboard> {
                 ],
               ),
             ),
-            const ScrollableListWidget(),
+            ScrollableListWidget(debtorId: widget.debtorId,adminId: widget.adminId),
           ],
         ),
       );
@@ -325,9 +326,10 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   }
 }
 
-// ignore: must_be_immutable
 class ScrollableListWidget extends StatefulWidget {
-  const ScrollableListWidget({super.key});
+  final int debtorId;
+  final int adminId;
+  const ScrollableListWidget({super.key , required this.debtorId , required this.adminId});
 
   @override
   _ScrollableListWidgetState createState() => _ScrollableListWidgetState();
@@ -338,6 +340,9 @@ class _ScrollableListWidgetState extends State<ScrollableListWidget> {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
+    final appStateWrite = context.read<AppState>();
+    final disbursementData = DisbursementData();
+
     return Expanded(
       child: appState.transactionCount == 0
           ? const Center(
@@ -390,7 +395,8 @@ class _ScrollableListWidgetState extends State<ScrollableListWidget> {
                     },
                     onDismissed: (direction) {
                       if (direction == DismissDirection.startToEnd) {
-                        print("dismissed successfully");
+                        // print("dismissed successfully");
+                        deleteTransaction(appStateWrite,context,appState.itemList[index]['ID'].toString(),widget.debtorId,widget.adminId,disbursementData);
                       }
                     },
                   child:GestureDetector(
@@ -513,6 +519,69 @@ class _ScrollableListWidgetState extends State<ScrollableListWidget> {
       },
     );
   }
+
+  void deleteTransaction(AppState appState,BuildContext context, transactionId,int debtorId,int adminId,DisbursementData disbursementData) async {
+  const String apiUrl = 'https://wpoc2ga7ki.execute-api.ap-southeast-1.amazonaws.com/dev/v1/DeleteDebtorTransaction';
+    try {
+        final response = await http.post(
+          Uri.parse(apiUrl),
+          body: {
+            'DebtorID': debtorId.toString(),
+            'TransactionID': transactionId,
+            'AdminID': adminId.toString(),
+          },
+        );
+        if (response.statusCode == 200) {
+          Map<String, dynamic> responseData = json.decode(response.body);
+          if (responseData['status'] == true){
+            Fluttertoast.showToast(
+              msg: "Transaction Deleted Successfully",
+              toastLength: Toast.LENGTH_SHORT,
+              gravity: ToastGravity.BOTTOM,
+              timeInSecForIosWeb: 2,
+              backgroundColor: Colors.green,
+              textColor: Colors.white,
+            );
+            int loanAmount = responseData['LoanAmount'];
+            int paidAmount = responseData['PaidAmount'];
+            String totalDisbursedAmount = responseData['TotalDisbursedAmount'];
+            List<Map<String, dynamic>> updatedTransactions = (responseData['Transactions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+            disbursementData.updateTransactions(appState,updatedTransactions.length,updatedTransactions);
+            disbursementData.updateDisbursedAmount(appState,totalDisbursedAmount);
+            disbursementData.updateAmountBox(appState,loanAmount,paidAmount);
+          }
+          else{
+            Fluttertoast.showToast(
+              msg: "Transaction Deletion Failed",
+              toastLength: Toast.LENGTH_LONG,
+              gravity: ToastGravity.BOTTOM,
+              timeInSecForIosWeb: 2,
+              backgroundColor: Colors.red,
+              textColor: Colors.white,
+            );
+          }
+          } else {
+          Fluttertoast.showToast(
+              msg: "Some Error Occoured",
+              toastLength: Toast.LENGTH_LONG,
+              gravity: ToastGravity.BOTTOM,
+              timeInSecForIosWeb: 2,
+              backgroundColor: Colors.red,
+              textColor: Colors.white,
+            );
+        }
+      } catch (e) {
+        Fluttertoast.showToast(
+              msg: "Server Error",
+              toastLength: Toast.LENGTH_LONG,
+              gravity: ToastGravity.BOTTOM,
+              timeInSecForIosWeb: 2,
+              backgroundColor: Colors.red,
+              textColor: Colors.white,
+            );
+      }
+}
 }
 
 

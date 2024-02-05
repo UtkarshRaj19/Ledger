@@ -9,6 +9,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 
 // ignore: must_be_immutable
 class ProfilePage1 extends StatelessWidget {
@@ -262,11 +263,44 @@ class _ScrollableListState extends State<_ScrollableList> {
                   itemCount: widget.activeDebtorsCount,
                   itemBuilder: (context, index) {
                     Map<String, dynamic> debtor = widget.activeDebtors[index];
+                    int adminId = debtor['AdminID'];
                     int debtorId = debtor['ID'];
                     String name = toTitleCase(debtor['Name']);
                     String mobile = debtor['Mobile'];
+                    String address = debtor['Address'];
                     
-                    return GestureDetector(
+                    return Dismissible(
+                    key: UniqueKey(),
+                    background: Container(
+                      color: Colors.transparent, // Swipe left background color
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.only(left: 10),
+                      child: const Icon(Icons.delete, color: Colors.red),
+                    ),
+                    secondaryBackground: Container(
+                      color: Colors.transparent, // Swipe right background color
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 10),
+                      child: const Icon(Icons.edit, color: Colors.orange),
+                    ),
+                    confirmDismiss: (direction) async {
+                    if (direction == DismissDirection.endToStart) {
+                      // Swipe left (edit)
+                      _showEditPopup(context,adminId,debtorId, name , mobile,address,refreshList);
+                      return false; // Do not dismiss immediately
+                    } else if (direction == DismissDirection.startToEnd) {
+                      // Swipe right (delete)
+                      bool shouldDelete = await _showDeleteConfirmationDialog(context,name);
+                      if (shouldDelete) {
+                        print("Debtor Deleted");
+                        _deleteDebtorAPI(adminId , debtorId ,appState,debtorData, refreshList);
+                      } else {
+                        return false; // Do not dismiss if user cancels
+                      }
+                    }
+                    return true; // Allow other directions to dismiss
+                  },
+                    child:GestureDetector(
                       onTap: () async {
                         if (!isNavigationInProgress) {
                         isNavigationInProgress = true;
@@ -367,6 +401,7 @@ class _ScrollableListState extends State<_ScrollableList> {
                         ),
                       ),
                       ),
+                      ),
                     );
                   },
                 )
@@ -385,6 +420,233 @@ class _ScrollableListState extends State<_ScrollableList> {
       },
     );
   }
+  Future<bool> _showDeleteConfirmationDialog(BuildContext context, String name) async {
+  bool result = (await showDialog<bool>(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: Text('Are you sure you want to delete $name?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(false); // Cancel
+            },
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(true); // Delete
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      );
+    },
+  )) ?? false; // Default to false if result is null
+
+  return result;
+}
+
+void _showEditPopup(BuildContext context,int adminId,int debtorId, String name, String mobile, String address,Function(List<Map<String, dynamic>>, int) onDebtorAdded) {
+  TextEditingController nameController = TextEditingController(text: name);
+  TextEditingController mobileController = TextEditingController(text: mobile);
+  TextEditingController addressController = TextEditingController(text: address);
+
+  bool hasChanges = false;
+
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return StatefulBuilder(
+        builder: (BuildContext context, StateSetter setState) {
+          return AlertDialog(
+            title: const Text('Edit Debtor'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                  onChanged: (value) {
+                    setState(() {
+                      hasChanges = value.trim() != name.trim();
+                    });
+                  },
+                ),
+                TextField(
+                  controller: mobileController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
+                  decoration: const InputDecoration(labelText: 'Mobile Number'),
+                  onChanged: (value) {
+                    setState(() {
+                      hasChanges = value.trim() != mobile.trim();
+                    });
+                  },
+                ),
+                TextField(
+                  controller: addressController,
+                  decoration: const InputDecoration(labelText: 'Address'),
+                  onChanged: (value) {
+                    setState(() {
+                      hasChanges = value.trim() != address.trim();
+                    });
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: hasChanges
+                    ? () {
+                        String updatedName = nameController.text;
+                        String updatedMobile = mobileController.text;
+                        String updatedAddress = addressController.text;
+                        if (updatedMobile.length == 10) {
+                          print("Name:$updatedName Mobile:$updatedMobile Address:$updatedAddress");
+                          _updateDebtorAPI(adminId , debtorId ,updatedName, updatedMobile , updatedAddress , onDebtorAdded);
+                          Navigator.of(context).pop(); // Close the popup
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Mobile number should be 10 digits'),
+                          ));
+                        }
+                      }
+                    : null,
+                child: const Text('Update'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+Future<void> _deleteDebtorAPI(int adminId,int debtorId,AppState appState,DebtorData debtorData,Function(List<Map<String, dynamic>>, int) onDebtorAdded) async {
+  const String apiUrl = 'https://wpoc2ga7ki.execute-api.ap-southeast-1.amazonaws.com/dev/v1/DeleteDebtor';
+  try {
+    final response = await http.post(
+      Uri.parse(apiUrl),
+      body: {
+        "AdminID": adminId.toString(),
+        "DebtorID":debtorId.toString()
+      },
+    );
+    if (response.statusCode == 200) {
+      Map<String, dynamic> responseData = json.decode(response.body);
+      if (responseData['status'] == true){
+        Fluttertoast.showToast(
+          msg: "Debtor Deletion Successful",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          timeInSecForIosWeb: 2,
+          backgroundColor: Colors.green,
+          textColor: Colors.white,
+        );
+        List<Map<String, dynamic>> newDebtors = (responseData['ActiveDebtors'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        String totalDisbursedAmount = responseData['TotalDisbursedAmount'];
+        onDebtorAdded(newDebtors, responseData['ActiveDebtorsCount']);
+        debtorData.updateTotalDisbursedAmount(appState, totalDisbursedAmount);
+      }
+      else{
+        Fluttertoast.showToast(
+          msg: "Debtor Deletion Failed",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          timeInSecForIosWeb: 2,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+        );
+      }
+      } else {
+      Fluttertoast.showToast(
+          msg: "Some Error Occoured",
+          toastLength: Toast.LENGTH_LONG,
+          gravity: ToastGravity.BOTTOM,
+          timeInSecForIosWeb: 2,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+        );
+    }
+  } catch (e) {
+    Fluttertoast.showToast(
+          msg: "Server Error",
+          toastLength: Toast.LENGTH_LONG,
+          gravity: ToastGravity.BOTTOM,
+          timeInSecForIosWeb: 2,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+        );
+  }
+}
+Future<void> _updateDebtorAPI(int adminId,int debtorId,String name , String mobile, String address,Function(List<Map<String, dynamic>>, int) onDebtorAdded) async {
+  const String apiUrl = 'https://wpoc2ga7ki.execute-api.ap-southeast-1.amazonaws.com/dev/v1/UpdateDebtor';
+  try {
+    final response = await http.post(
+      Uri.parse(apiUrl),
+      body: {
+        "AdminID": adminId.toString(),
+        "DebtorID":debtorId.toString(),
+        "Name":name,
+        "Mobile":mobile,
+        "Address":address
+      },
+    );
+    if (response.statusCode == 200) {
+      Map<String, dynamic> responseData = json.decode(response.body);
+      if (responseData['status'] == true){
+        Fluttertoast.showToast(
+          msg: "Debtor Updation Successful",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          timeInSecForIosWeb: 2,
+          backgroundColor: Colors.green,
+          textColor: Colors.white,
+        );
+        List<Map<String, dynamic>> newDebtors = (responseData['ActiveDebtors'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        onDebtorAdded(newDebtors, responseData['ActiveDebtorsCount']);
+      }
+      else{
+        Fluttertoast.showToast(
+          msg: "Debtor Updation Failed",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          timeInSecForIosWeb: 2,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+        );
+      }
+      } else {
+      Fluttertoast.showToast(
+          msg: "Some Error Occoured",
+          toastLength: Toast.LENGTH_LONG,
+          gravity: ToastGravity.BOTTOM,
+          timeInSecForIosWeb: 2,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+        );
+    }
+  } catch (e) {
+    Fluttertoast.showToast(
+          msg: "Server Error",
+          toastLength: Toast.LENGTH_LONG,
+          gravity: ToastGravity.BOTTOM,
+          timeInSecForIosWeb: 2,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+        );
+  }
+}
 }
 
 
@@ -445,5 +707,9 @@ class DebtorData {
 
   void updateAmountBox(AppState appState,int newamountTaken,int newAmountPaid) {
     appState.setAmountBox(newamountTaken,newAmountPaid);
+  }
+
+  void updateTotalDisbursedAmount(AppState appState,String totalDisbursedAmount) {
+    appState.setTotalDisbursedAmount(totalDisbursedAmount);
   }
 }
